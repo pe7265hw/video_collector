@@ -1,6 +1,10 @@
-from django.shortcuts import render
-from .forms import VideoForm
+from django.shortcuts import render, redirect
+from .forms import VideoForm, SearchForm
 from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
+from django.db.models.functions import Lower
+from .models import Video
 
 def home(request):
     app_name = 'Time Wasting Dwarf Fortress Videos'
@@ -10,13 +14,33 @@ def add(request):
     if request.method == 'POST':
         new_video_form = VideoForm(request.POST)
         if new_video_form.is_valid():
-            new_video_form.save()
-            messages.info(request, 'New video saved!')
+            try:
+                new_video_form.save()
+                return redirect('video_list')
+                # messages.info(request, 'New video saved!')
             #todo show success message or redirect to list of videos
-        else:
-            messages.warning(request, 'Please check the data entered.')
-            return render(request, 'video_collection/add.html', {'new_video_form': new_video_form})
-            # if data is not valid it will re-display the same page, but will have the data the user typed in
+            except ValidationError:
+                messages.warning(request, 'Invalid Youtube URL')
+            except IntegrityError:
+                messages.warning(request, 'You already added that video.')
+        
+        messages.warning(request, 'Please check the data entered.')
+        return render(request, 'video_collection/add.html', {'new_video_form': new_video_form})
+        # if data is not valid it will re-display the same page, but will have the data the user typed in
     
     new_video_form = VideoForm
     return render(request, 'video_collection/add.html', {'new_video_form': new_video_form})
+
+def video_list(request):
+
+    search_form = SearchForm(request.GET) # build form from data user has sent to app
+
+    if search_form.is_valid():
+        search_term = search_form.cleaned_data['search_term'] # example: 'hoodie hair'
+        videos = Video.objects.filter(name__icontains=search_term).order_by(Lower('name'))
+
+    else: # form is not filled in or this is the first time user uses the page
+        search_form = SearchForm()
+        videos = Video.objects.order_by('name')
+
+    return render(request, 'video_collection/video_list.html', {'videos': videos, 'search_form': search_form})
